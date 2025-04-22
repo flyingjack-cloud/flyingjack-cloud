@@ -1,14 +1,6 @@
-# 忽略主项目的环境配置
-/application-test.yml
-/application-dev.yml
-/application-test.properties
-/application-dev.properties
-
-# 忽略所有子模块的环境配置
-*/src/main/resources/application-test.yml
-*/src/main/resources/application-dev.yml
-*/src/main/resources/application-test.properties
-*/src/main/resources/application-dev.properties
+# 环境配置
+application-dev.*
+application-test.*
 
 #通过以下两行配置，忽略根目录和子模块的target文件夹编译文件
 target/
