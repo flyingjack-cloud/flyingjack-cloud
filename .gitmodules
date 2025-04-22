@@ -1,0 +1,9 @@
+[submodule "common-lib"]
+	path = common-lib
+	url = git@github.com:flyingjack-cloud/common-lib.git
+[submodule "third-party-service"]
+	path = third-party-service
+	url = git@github.com:flyingjack-cloud/third-party-service.git
+[submodule "auth-service"]
+	path = auth-service
+	url = git@github.com:flyingjack-cloud/auth-service.git
