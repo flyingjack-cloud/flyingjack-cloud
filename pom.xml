@@ -54,8 +54,15 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>1.14.6</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>top.flyingjack</groupId>
-                <artifactId>common</artifactId>
+                <artifactId>common-lib</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
         </dependencies>
@@ -83,11 +90,11 @@
     </build>
 
     <modules>
-        <module>common</module>
-        <module>auth</module>
+        <module>common-lib</module>
+        <module>auth-service</module>
         <module>wms-cashier</module>
         <module>gateway</module>
-        <module>thirdparty-service</module>
+        <module>third-party-service</module>
     </modules>
 
 </project>
