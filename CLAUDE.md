@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`flyingjack-cloud` is a multi-module Maven microservices project built on Java 21, Spring Boot 3.2.4, and Spring Cloud 2023.0.1. Services are deployed to Kubernetes and use Alibaba Cloud components (Nacos for service discovery/config, Sentinel for service governance).
+`flyingjack-cloud` is a multi-module Maven microservices project built on Java 21, Spring Boot 3.2.4, and Spring Cloud 2023.0.1. Services are deployed to Kubernetes and use Alibaba Cloud components (Sentinel for service governance).
 
 ## Build & Test Commands
 
@@ -38,7 +38,7 @@ Five Maven modules — three are Git submodules:
 |---|---|---|
 | `common-lib` | Shared library (JAR, not a runnable service) | — |
 | `auth-service` | OAuth2 Authorization Server (Spring Security OAuth2, JWT, PostgreSQL) | 9001 (dev) |
-| `gateway` | Spring Cloud Gateway, request routing, rate limiting | 9999 |
+| `gateway` | **Deprecated — do not use.** Spring Cloud Gateway module, kept in repo but no longer part of the active architecture. Routing is fully handled by Istio. | — |
 | `third-party-service` | External integrations: SMS (Alibaba Cloud), Email (Netease SMTP), Captcha | 7100 |
 | `wms-cashier` | OAuth2 Resource Server; validates JWTs from auth-service | 8081 |
 
@@ -47,29 +47,44 @@ Git submodules: `common-lib`, `auth-service`, `third-party-service` (hosted unde
 ## Architecture
 
 ### Request Flow
-Client → Gateway (9999) → auth-service / third-party-service / wms-cashier
+**Production:** Client → Istio IngressGateway (`auth.flyingjack.top`) → auth-service / frontend
 
-**Rate limiting must always be implemented at the Gateway**, not in individual services.
+**Dev:** Client → auth-service / third-party-service / wms-cashier (direct, no gateway layer)
+
+Spring Cloud Gateway (`gateway` module) is **deprecated and not used**. All routing is handled by Istio.
+
+**Rate limiting must always be implemented at the Istio layer**, not in individual services.
 
 ### Service Communication
-Services communicate via **OpenFeign** with **Alibaba Sentinel** circuit breaking. Service discovery uses **Alibaba Nacos**.
+Services communicate via **OpenFeign** with **Alibaba Sentinel** circuit breaking. In K8s (beta/prod), inter-service addresses are resolved via K8s cluster-internal DNS (e.g. `http://thirdparty-service:7100`), injected through ConfigMap. In dev, fixed URLs are configured in `application-dev.yml`.
 
 ### Auth Model
 - `auth-service` is the OAuth2 Authorization Server that issues JWTs (RSA-signed via JOSE).
 - All other services act as OAuth2 Resource Servers, validating tokens issued by auth-service.
 - RSA private key injected via environment variable `RSA_PRIVATE_KEY` in non-dev environments.
+- **Issuer URI** is controlled by `AUTH_ISSUER_URI` env var (prod: `https://auth.flyingjack.top`). In dev, leave unset — Spring derives it from the request host automatically.
+- Resource servers (e.g. `wms-cashier`) read `AUTH_ISSUER_URI` to discover JWKS and validate the `iss` claim. Dev default falls back to `http://localhost:9001`.
+
+### Istio Routing (prod/beta)
+`auth.flyingjack.top` is served by a single Istio VirtualService (in `k8s-gitops/auth-service/overlays/prod/networking.yaml`) with the following path rules (priority order):
+
+| Path prefix | Destination | Path rewrite |
+|---|---|---|
+| `/oauth2/` | auth-service | none |
+| `/.well-known/` | auth-service | none |
+| `/api/` | auth-service | strip `/api` → `/` |
+| `/**` | frontend | none (catch-all, add when ready) |
+
+Business API calls from clients must use the `/api/` prefix in prod. OAuth2 standard endpoints are accessed at their standard paths.
 
 ### Configuration
-Config is loaded from **Kubernetes ConfigMaps/Secrets** (via `spring-cloud-starter-kubernetes-client-config`) plus **Nacos** for dynamic rules.
+Config is loaded from **Kubernetes ConfigMaps/Secrets** (via `spring-cloud-starter-kubernetes-client-config`). Nacos is used **only** for Sentinel flow control rules (`sentinel-datasource-nacos`), not for service discovery or general config.
 
-Nacos namespace/group/dataId structure:
+Nacos usage (Sentinel rules only):
 - **Namespace:** `flyingjack-{profile}` (e.g., `flyingjack-dev`, `flyingjack-beta`)
-- **Groups:**
-  - `DEFAULT_GROUP` — service-specific config
-  - `SENTINEL_GROUP` — service governance / flow control rules
-  - `COMMON_GROUP` — shared config (e.g., datasource)
+- **Group:** `SENTINEL_GROUP` — flow control / circuit breaker rules
 
-Profiles: `dev` (default), `beta`, `prod`. Each service has `application.yml`, `application-{profile}.yml`, and `bootstrap.yml`.
+Profiles: `dev` (default), `beta`, `prod`. Each service has `application.yml`, `application-{profile}.yml`, and `bootstrap.yml` (bootstrap.yml excluded in dev profile build).
 
 ### common-lib Conventions
 
