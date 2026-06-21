@@ -1,3 +1,7 @@
+# Claude Code
+.claude/
+docs/superpowers/
+
 # no secret
 **/*.secret
 
