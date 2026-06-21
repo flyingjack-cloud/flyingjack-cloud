@@ -37,13 +37,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Module Structure
 
-Five Maven modules — three are Git submodules:
+Four Maven modules — all are Git submodules except the root:
 
 | Module | Role | Port |
 |---|---|---|
 | `common-lib` | Shared library (JAR, not a runnable service) | — |
 | `auth-service` | OAuth2 Authorization Server (Spring Security OAuth2, JWT, PostgreSQL) | 9001 (dev) |
-| `gateway` | **Deprecated — do not use.** Spring Cloud Gateway module, kept in repo but no longer part of the active architecture. Routing is fully handled by Istio. | — |
 | `third-party-service` | External integrations: SMS (Alibaba Cloud), Email (Netease SMTP), Captcha | 7100 |
 | `wms-cashier` | OAuth2 Resource Server; validates JWTs from auth-service | 8081 |
 
@@ -55,8 +54,6 @@ Git submodules: `common-lib`, `auth-service`, `third-party-service`, `wms-cashie
 **Production:** Client → Istio IngressGateway (`auth.flyingjack.top`) → auth-service / frontend
 
 **Dev:** Client → auth-service / third-party-service / wms-cashier (direct, no gateway layer)
-
-Spring Cloud Gateway (`gateway` module) is **deprecated and not used**. All routing is handled by Istio.
 
 **Rate limiting must always be implemented at the Istio layer**, not in individual services.
 
