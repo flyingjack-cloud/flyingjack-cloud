@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `flyingjack-cloud` is a multi-module Maven microservices project built on Java 21, Spring Boot 3.2.4, and Spring Cloud 2023.0.1. Services are deployed to Kubernetes and use Alibaba Cloud components (Sentinel for service governance).
 
+## Branch Strategy
+
+- **`develop`** is the active development branch. All changes must be made on `develop` — never commit directly to `main`.
+- `main` only receives changes via merge from `develop`.
+
 ## Build & Test Commands
 
 ```bash
@@ -42,7 +47,7 @@ Five Maven modules — three are Git submodules:
 | `third-party-service` | External integrations: SMS (Alibaba Cloud), Email (Netease SMTP), Captcha | 7100 |
 | `wms-cashier` | OAuth2 Resource Server; validates JWTs from auth-service | 8081 |
 
-Git submodules: `common-lib`, `auth-service`, `third-party-service` (hosted under the `flyingjack-cloud` GitHub org).
+Git submodules: `common-lib`, `auth-service`, `third-party-service`, `wms-cashier` (all hosted under the `flyingjack-cloud` GitHub org).
 
 ## Architecture
 
