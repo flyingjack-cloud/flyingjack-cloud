@@ -4,7 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`flyingjack-cloud` is a multi-module Maven microservices project built on Java 21, Spring Boot 3.2.4, and Spring Cloud 2023.0.1. Services are deployed to Kubernetes and use Alibaba Cloud components (Sentinel for service governance).
+`flyingjack-cloud` is a multi-module Maven microservices project built on Java 21, Spring Boot 3.2.4, and Spring Cloud 2023.0.1. Services are deployed to Kubernetes.
+
+## Branch Strategy
+
+- **`develop`** is the active development branch. All changes must be made on `develop` — never commit directly to `main`.
+- `main` only receives changes via merge from `develop`.
+- This rule applies to **all submodules** (`common-lib`, `auth-service`, `third-party-service`, `wms-cashier`) — always verify you are on `develop` before committing in any submodule.
+- Before committing in any submodule, run `git branch` to confirm the active branch is `develop`.
 
 ## Build & Test Commands
 
@@ -32,17 +39,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Module Structure
 
-Five Maven modules — three are Git submodules:
+Four Maven modules — all are Git submodules except the root:
 
 | Module | Role | Port |
 |---|---|---|
 | `common-lib` | Shared library (JAR, not a runnable service) | — |
 | `auth-service` | OAuth2 Authorization Server (Spring Security OAuth2, JWT, PostgreSQL) | 9001 (dev) |
-| `gateway` | **Deprecated — do not use.** Spring Cloud Gateway module, kept in repo but no longer part of the active architecture. Routing is fully handled by Istio. | — |
 | `third-party-service` | External integrations: SMS (Alibaba Cloud), Email (Netease SMTP), Captcha | 7100 |
 | `wms-cashier` | OAuth2 Resource Server; validates JWTs from auth-service | 8081 |
 
-Git submodules: `common-lib`, `auth-service`, `third-party-service` (hosted under the `flyingjack-cloud` GitHub org).
+Git submodules: `common-lib`, `auth-service`, `third-party-service`, `wms-cashier` (all hosted under the `flyingjack-cloud` GitHub org).
 
 ## Architecture
 
@@ -51,12 +57,10 @@ Git submodules: `common-lib`, `auth-service`, `third-party-service` (hosted unde
 
 **Dev:** Client → auth-service / third-party-service / wms-cashier (direct, no gateway layer)
 
-Spring Cloud Gateway (`gateway` module) is **deprecated and not used**. All routing is handled by Istio.
-
 **Rate limiting must always be implemented at the Istio layer**, not in individual services.
 
 ### Service Communication
-Services communicate via **OpenFeign** with **Alibaba Sentinel** circuit breaking. In K8s (beta/prod), inter-service addresses are resolved via K8s cluster-internal DNS (e.g. `http://thirdparty-service:7100`), injected through ConfigMap. In dev, fixed URLs are configured in `application-dev.yml`.
+Services communicate via **OpenFeign**. In K8s (beta/prod), service addresses are resolved via K8s cluster-internal DNS (e.g. `http://thirdparty-service:7100`) — no external service registry. In dev, fixed URLs are configured in `application-dev.yml`.
 
 ### Auth Model
 - `auth-service` is the OAuth2 Authorization Server that issues JWTs (RSA-signed via JOSE).
@@ -78,11 +82,7 @@ Services communicate via **OpenFeign** with **Alibaba Sentinel** circuit breakin
 Business API calls from clients must use the `/api/` prefix in prod. OAuth2 standard endpoints are accessed at their standard paths.
 
 ### Configuration
-Config is loaded from **Kubernetes ConfigMaps/Secrets** (via `spring-cloud-starter-kubernetes-client-config`). Nacos is used **only** for Sentinel flow control rules (`sentinel-datasource-nacos`), not for service discovery or general config.
-
-Nacos usage (Sentinel rules only):
-- **Namespace:** `flyingjack-{profile}` (e.g., `flyingjack-dev`, `flyingjack-beta`)
-- **Group:** `SENTINEL_GROUP` — flow control / circuit breaker rules
+All config is injected as **OS environment variables** via the K8s Pod spec (`env` / `envFrom` referencing ConfigMap or Secret). Services read them through Spring's standard `${ENV_VAR}` placeholder — `spring-cloud-kubernetes-client-config` is not used. Service discovery uses K8s ClusterDNS — Nacos is not used.
 
 Profiles: `dev` (default), `beta`, `prod`. Each service has `application.yml`, `application-{profile}.yml`, and `bootstrap.yml` (bootstrap.yml excluded in dev profile build).
 

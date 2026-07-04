@@ -60,13 +60,11 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <dependency>
-                <groupId>top.flyingjack</groupId>
-                <artifactId>common-lib</artifactId>
-                <version>0.0.1-SNAPSHOT</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <!--common-lib 采用独立语义化版本，由各服务在自己的 pom 中显式声明依赖版本，不再由 root 统一管理-->
+    <!--CI 通过 checkout + 本地 mvn install 解析 common-lib，无需发布到远端仓库，故不配置 distributionManagement-->
 
     <build>
         <plugins>
@@ -93,8 +91,7 @@
         <module>common-lib</module>
         <module>auth-service</module>
         <module>wms-cashier</module>
-        <module>gateway</module>
-        <module>third-party-service</module>
+<module>third-party-service</module>
     </modules>
 
 </project>
