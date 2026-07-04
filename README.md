@@ -23,6 +23,57 @@
   git branch --show-current   # 必须是 develop
   ```
 
+## 提交代码触发的完整流程
+
+```
+开发者 push
+  │
+  ├─ push 到某个服务自己的仓库（auth-service / third-party-service）
+  │     └─▶ 服务自身 CI（GitHub Actions self-hosted）
+  │           ├─ Maven 构建 + 测试
+  │           ├─ Docker build & push → 自托管镜像仓库
+  │           └─ 更新 k8s-gitops image tag → ArgoCD 同步 → K8s
+  │
+  └─ push 到 common-lib 仓库
+        │
+        ├─ develop 分支
+        │     └─▶ common-lib CI
+        │           ├─ mvn install（只装本地 .m2，不发布）
+        │           └─ repository_dispatch（无条件触发）
+        │                 └─▶ auth-service / third-party-service CI
+        │                       ├─ checkout common-lib develop 最新源码
+        │                       ├─ 本地 mvn install 现装现用
+        │                       ├─ 重新构建测试 + 打镜像（beta-cl{sha}）
+        │                       └─ 更新 gitops → ArgoCD 同步到 beta
+        │                       （每次都是最新代码，不看版本号，一定会更新）
+        │
+        └─ main 分支
+              └─▶ common-lib CI
+                    ├─ mvn deploy → 发布到 GitHub Packages（版本号取 pom 当前值）
+                    ├─ 按版本号打 git tag（v{version}，已存在则跳过）
+                    └─ repository_dispatch（无条件触发，跟 develop 一样会发）
+                          └─▶ auth-service / third-party-service CI
+                                ├─ 跳过 checkout，直接 mvn clean verify
+                                ├─ 按自己 pom 里 pin 的版本号从 Packages 解析 common-lib
+                                └─ 构建测试 + 打镜像（prod-cl{sha}）+ 更新 gitops → ArgoCD 同步到 prod
+                                （CI 一定会被触发；但只有 pin 的版本号被手动 bump 过，
+                                 才会真的用上 common-lib 的新内容——没 bump 就是拉旧版本
+                                 重新构建一次，内容不变，等于白跑一次）
+
+Renovate（独立于上面这条流水线，定时触发，不依赖 push）
+  │
+  └─ 每天定时（.github/workflows/renovate.yml，跑在 self-hosted runner 上）
+        └─▶ 扫描 auth-service / third-party-service / wms-cashier 的 pom.xml
+              └─ 对比 GitHub Packages 上 common-lib 的最新发布版本 vs pom 里 pin 的版本号
+                    ├─ 有新版本 → 自动开 PR，把 pom 里的版本号 bump 上去
+                    │     ├─ PR 触发该服务正常的 CI（main 分支那套 mvn verify 流程）
+                    │     ├─ patch / minor 版本 → CI 通过后自动 merge
+                    │     └─ major 版本 → 只开 PR、打 needs-review 标签，等人工合并
+                    └─ 没有新版本 → 什么也不做
+```
+
+**Renovate 的作用**：上面 main 分支那条流水线里"CI 会自动触发，但内容更不更新看有没有手动 bump 版本号"这一步，本来需要人自己记得去改三个服务的 pom——Renovate 就是把这个"记得去改"自动化：它不跟着 common-lib 的 push 走，是自己按天定时去检查 Packages 上有没有比 pom 里 pin 的版本更新的发布版本，有就自动开 PR 帮你 bump，PR 本身又会触发正常 CI 去验证兼容性，测试过了（patch/minor）就自动合并，测试没过或者是 major 版本就留给人工处理。
+
 ## 日常提交步骤
 
 1. 进入对应的子模块目录（或根目录），确认当前分支是 `develop`。
@@ -51,7 +102,7 @@
 - 但凡涉及往 `main` 发布（或者你想让某个服务真正锁定某个 common-lib 版本），**必须先手动把该服务 pom 里的 `common-lib` 依赖版本改成目标版本号**，否则 main 构建会去 Packages 拉一个还没发布过的版本而失败，或者悄悄继续用旧版本、看起来"发布了"但内容没变。
 - common-lib 发布新版本的标准动作：改 `common-lib/pom.xml` 里的 `<version>`，合并到 `main` 后 CI 会自动打 tag（`v{version}`，已存在则跳过）并 `mvn deploy` 到 GitHub Packages。发布完成后，再手动去逐个更新下游服务 pom 里 pin 的版本号，提交、推送。
 
-这一步目前是纯手动的（没有接 Renovate 之类的自动化工具),common-lib 一旦 bump 版本，别忘了同步检查三个下游服务的 pin 是否需要跟进更新。
+这一步已经接了 Renovate 自动化（见上面"提交代码触发的完整流程"里的说明）——common-lib 发布新版本后不需要再手动逐个改下游 pom，Renovate 每天会自动检测并开 PR。
 
 ### 本地开发者单独构建某个服务
 
